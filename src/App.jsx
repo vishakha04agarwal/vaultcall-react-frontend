@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+﻿import { useState, useEffect, useMemo, useRef } from "react";
 import "./App.css";
 
 const DEFAULT_API_URL =
@@ -45,6 +45,19 @@ export default function App() {
   });
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [listeningField, setListeningField] = useState(null);
+  const [installPrompt, setInstallPrompt] = useState(null);
+
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    const onBeforeInstall = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("vaultcall_api_url", apiUrl);
@@ -103,7 +116,75 @@ export default function App() {
 
   const showToast = (msg) => {
     setNotice(msg);
-    setTimeout(() => setNotice(""), 3000);
+    setTimeout(() => setNotice(""), 3200);
+  };
+
+  const triggerInstall = async () => {
+    if (!installPrompt) {
+      showToast("Chrome menu (⋮) -> Install app / Add to Home screen use karein.");
+      return;
+    }
+    installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    if (choice.outcome === "accepted") {
+      setInstallPrompt(null);
+      showToast("VaultCall PWA install ho gaya!");
+    }
+  };
+
+  const startVoiceInput = (targetField) => {
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) {
+      showToast("Is browser mein voice typing supported nahi hai. Chrome try karein.");
+      return;
+    }
+
+    if (listeningField === targetField && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setListeningField(null);
+      return;
+    }
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+
+    const rec = new SpeechRec();
+    rec.lang = profile.lang || "hi-IN";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+
+    rec.onstart = () => {
+      setListeningField(targetField);
+      showToast("Bolna shuru karein...");
+    };
+
+    rec.onresult = (event) => {
+      const spoken = event.results?.[0]?.[0]?.transcript || "";
+      if (!spoken) return;
+      if (targetField === "line") {
+        setLineText((prev) => (prev ? `${prev} ${spoken}` : spoken));
+      } else if (targetField === "notes") {
+        setForm((prev) => ({
+          ...prev,
+          notes: prev.notes ? `${prev.notes} ${spoken}` : spoken,
+        }));
+      }
+    };
+
+    rec.onerror = () => {
+      showToast("Mic permission ya speech capture nahi ho paya.");
+      setListeningField(null);
+    };
+
+    rec.onend = () => {
+      setListeningField(null);
+    };
+
+    recognitionRef.current = rec;
+    rec.start();
   };
 
   const addContact = async (e) => {
@@ -137,9 +218,7 @@ export default function App() {
           showToast("Contact saved to Neon PostgreSQL!");
           return;
         }
-      } catch {
-        // Fallback to local state below
-      }
+      } catch {}
     }
 
     setContacts((prev) => [{ id: String(Date.now()), ...payload }, ...prev]);
@@ -195,9 +274,7 @@ export default function App() {
           showToast("Transcript saved to Neon DB!");
           return;
         }
-      } catch {
-        // Fallback below
-      }
+      } catch {}
     }
 
     setTranscripts((prev) => [{ id: String(Date.now()), ...payload }, ...prev]);
@@ -217,22 +294,29 @@ export default function App() {
     <div className="container">
       <header className="header">
         <div>
-          <h1>VaultCall</h1>
+          <h1>VaultCall PWA</h1>
           <p className="status">
             {dbStatus} • <span className="url-pill">{apiUrl}</span>
           </p>
         </div>
-        <nav className="tabs">
-          {["contacts", "popup", "transcripts", "settings"].map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={tab === t ? "tab active" : "tab"}
-            >
-              {t}
+        <div className="header-actions">
+          {installPrompt && (
+            <button type="button" onClick={triggerInstall} className="btn-install">
+              Install App
             </button>
-          ))}
-        </nav>
+          )}
+          <nav className="tabs">
+            {["contacts", "popup", "transcripts", "settings"].map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={tab === t ? "tab active" : "tab"}
+              >
+                {t}
+              </button>
+            ))}
+          </nav>
+        </div>
       </header>
 
       {notice && <div className="toast">{notice}</div>}
@@ -256,12 +340,21 @@ export default function App() {
               placeholder="Tag (e.g., Client, VIP)"
               className="full"
             />
-            <textarea
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="Private Notes (saved in Neon PostgreSQL)"
-              className="full"
-            />
+            <div className="full row">
+              <textarea
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Private Notes (type karein ya mic se bolein)"
+              />
+              <button
+                type="button"
+                onClick={() => startVoiceInput("notes")}
+                className={listeningField === "notes" ? "btn-mic active" : "btn-mic"}
+                title="Bolkar note likhein"
+              >
+                {listeningField === "notes" ? "⏹ Stop" : "🎙️"}
+              </button>
+            </div>
             <button type="submit" disabled={saving} className="btn-primary full">
               {saving ? "Saving..." : "Save to Neon Database"}
             </button>
@@ -294,7 +387,7 @@ export default function App() {
 
       {tab === "popup" && (
         <div className="card section">
-          <label className="label">Simulate Incoming Call Number</label>
+          <label className="label">Caller Number Lookup</label>
           <input
             value={simPhone}
             onChange={(e) => setSimPhone(e.target.value)}
@@ -334,7 +427,7 @@ export default function App() {
               setLiveLines([...liveLines, { speaker, text: lineText.trim() }]);
               setLineText("");
             }}
-            className="row"
+            className="row wrap-mobile"
           >
             <select value={speaker} onChange={(e) => setSpeaker(e.target.value)}>
               <option value="Me">{profile.name || "Me"} (Me)</option>
@@ -345,8 +438,16 @@ export default function App() {
             <input
               value={lineText}
               onChange={(e) => setLineText(e.target.value)}
-              placeholder="Type call transcript line..."
+              placeholder="Bolein ya type karein..."
             />
+            <button
+              type="button"
+              onClick={() => startVoiceInput("line")}
+              className={listeningField === "line" ? "btn-mic active" : "btn-mic"}
+              title="Mic se bolein"
+            >
+              {listeningField === "line" ? "⏹" : "🎙️"}
+            </button>
             <button type="submit" className="btn-secondary">
               Add
             </button>

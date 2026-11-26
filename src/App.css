@@ -1,4 +1,4 @@
-* {
+﻿* {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -241,5 +241,46 @@ textarea {
 @media (max-width: 600px) {
   .form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.btn-install {
+  background: #10b981;
+  color: #020617;
+  border: none;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.75rem;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.btn-mic {
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid #334155;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-mic.active {
+  background: #dc2626;
+  border-color: #f87171;
+  color: #ffffff;
+}
+
+@media (max-width: 600px) {
+  .wrap-mobile {
+    flex-wrap: wrap;
   }
 }
