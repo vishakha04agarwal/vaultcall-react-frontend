@@ -1,0 +1,14 @@
+# Dependencies
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor logs & OS files
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
